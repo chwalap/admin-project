@@ -1,1 +1,1 @@
-FROM confluentinc/cp-kafka:5.1.0
+FROM confluentinc/cp-kafka:latest

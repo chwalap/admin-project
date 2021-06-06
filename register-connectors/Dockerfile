@@ -1,5 +1,3 @@
-FROM alpine:latest
-RUN apk add --no-cache coreutils curl
-COPY ./configs /configs
-COPY ./scripts /scripts
-CMD [ "sh", "/scripts/register_connectors.sh" ]
+FROM ubuntu:latest
+WORKDIR /scripts
+RUN apt-get update && apt-get install netcat curl bash -y

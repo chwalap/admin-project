@@ -1,5 +1,5 @@
 {
-    "name": "mosquitto-mqtt",
+    "name": "mqtt",
     "config": {
         "connector.class": "io.confluent.connect.mqtt.MqttSourceConnector",
         "tasks.max": 1,

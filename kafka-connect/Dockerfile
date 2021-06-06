@@ -1,6 +1,6 @@
-FROM confluentinc/cp-kafka-connect:latest
+FROM confluentinc/cp-kafka-connect:5.1.0
 
 COPY ./configs/* /kafka/
-COPY ./scripts/wait_for_socket.sh /kafka/
+COPY ./scripts/wait-for-socket.sh /kafka/
 
-CMD /kafka/wait_for_socket.sh kafka 9092 && sleep 10 && /usr/bin/connect-standalone ${CONFIG}
+CMD /kafka/wait-for-socket.sh kafka 9092 && sleep 10 && /usr/bin/connect-standalone ${CONFIG}

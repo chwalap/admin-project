@@ -42,8 +42,6 @@ services:
       - ./data/zookeeper:/data
       - ./logs/zookeeper:/datalog
     restart: unless-stopped
-    # logging:
-    #   driver: none
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -64,8 +62,6 @@ services:
     depends_on:
       - zookeeper
     restart: unless-stopped
-    # logging:
-    #   driver: none
     command: "bash -c ' \
       echo Waiting for Zookeeper && /scripts/wait-for-socket.sh zookeeper 2181 && \
       echo Mosquitto is up and running && \
@@ -186,13 +182,13 @@ services:
       - mongo-db
     restart: unless-stopped
 
-  register-connectors:
-    image: register-connectors 
-    hostname: register-connectors
-    container_name: register-connectors
+  system-setup:
+    image: system-setup
+    hostname: system-setup
+    container_name: system-setup
     build:
       context: .
-      dockerfile: ./register-connectors/Dockerfile
+      dockerfile: ./system-setup/Dockerfile
     command: "bash -c ' \
       echo Waiting for Kafka Connector MQTT && /scripts/wait-for-socket.sh kafka-mqtt 8083 && \
       echo Waiting for Kafka Connector MongoDB && /scripts/wait-for-socket.sh kafka-mongodb 8083 && \
@@ -207,5 +203,3 @@ services:
       - kafka-mqtt
       - kafka-mongodb
       - mosquitto
-
-      # dokumentacja

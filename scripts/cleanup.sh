@@ -1,4 +1,4 @@
 #!/bin/sh
 
-curl -X DELETE http://kafka-connect:8083/connectors/mosquitto-mqtt
-curl -X DELETE http://kafka-connect:8083/connectors/mongodb-sink
+curl -X DELETE http://kafka-mqtt:8083/connectors/mqtt
+curl -X DELETE http://kafka-mongodb:8083/connectors/mongodb

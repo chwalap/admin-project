@@ -42,8 +42,8 @@ services:
       - ./data/zookeeper:/data
       - ./logs/zookeeper:/datalog
     restart: unless-stopped
-    logging:
-      driver: none
+    # logging:
+    #   driver: none
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -64,17 +64,16 @@ services:
     depends_on:
       - zookeeper
     restart: unless-stopped
-    logging:
-      driver: none
+    # logging:
+    #   driver: none
     command: "bash -c ' \
+      echo Waiting for Zookeeper && /scripts/wait-for-socket.sh zookeeper 2181 && \
+      echo Mosquitto is up and running && \
       echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
       echo Mosquitto is up and running && /etc/confluent/docker/run'"
 
   kafka-mqtt:
-    image: confluentinc/cp-kafka-connect:latest #kafka-mqtt
-    # build:
-    #   context: .
-    #   dockerfile: ./kafka-mqtt/Dockerfile
+    image: confluentinc/cp-kafka-connect:latest
     hostname: kafka-mqtt
     container_name: kafka-mqtt
     ports:
@@ -99,13 +98,10 @@ services:
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_STORAGE_PARTITIONS: 1
       CONNECT_STATUS_STORAGE_PARTITIONS: 1
-      # KAFKA_LOG4J_ROOT_LOGLEVEL: DEBUG
     depends_on:
       - zookeeper
       - kafka
     restart: unless-stopped
-    logging:
-      driver: none
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
       echo Kafka is up and running && /etc/confluent/docker/run'"
@@ -132,7 +128,6 @@ services:
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_STORAGE_PARTITIONS: 1
       CONNECT_STATUS_STORAGE_PARTITIONS: 1
-      # KAFKA_LOG4J_ROOT_LOGLEVEL: DEBUG
     depends_on:
       - zookeeper
       - kafka
@@ -141,8 +136,6 @@ services:
       - ./scripts:/scripts
       - ./configs:/configs
     restart: unless-stopped
-    logging:
-      driver: none
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
       echo Kafka is up and running && /etc/confluent/docker/run'"
@@ -153,12 +146,17 @@ services:
     container_name: kafka-moving-average
     build:
       context: .
-      dockerfile: ./kafka-processor/Dockerfile
+      dockerfile: ./kafka-streams/Dockerfile
     restart: unless-stopped
     depends_on:
       - kafka-mqtt
       - kafka-mongodb
       - mongo-db
+    volumes:
+      - ./scripts:/scripts
+    command: "bash -c ' \
+      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
+      echo Kafka is up and running && sleep 20 && java -cp kafka.jar com.kafka.myapps.MovingAverage'"
 
   mongo-db:
     image: mongo:latest
@@ -171,8 +169,6 @@ services:
     volumes:
       - ./data/mongo-db:/data
     restart: unless-stopped
-    logging:
-      driver: none
     command: --bind_ip_all
 
   mongo-client:
@@ -189,8 +185,6 @@ services:
     depends_on:
       - mongo-db
     restart: unless-stopped
-    logging:
-      driver: none
 
   register-connectors:
     image: register-connectors 
@@ -215,5 +209,3 @@ services:
       - mosquitto
 
       # dokumentacja
-      # schemat architektury
-      # srednia kroczaca

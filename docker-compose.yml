@@ -29,9 +29,9 @@ services:
     depends_on:
       - mosquitto
     restart: unless-stopped
-    command: "bash -c ' \
+    command: "sh -c ' \
       echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
-      /scripts/temp.sh | /usr/bin/mosquitto_pub -h mosquitto -p 1883 -t temperature -c -l'"
+      /scripts/temp.sh | /usr/bin/mosquitto_pub -h mosquitto -p 1883 -t temperature --id 666 -c -l'"
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest

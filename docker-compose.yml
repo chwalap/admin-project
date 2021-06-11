@@ -23,11 +23,6 @@ services:
     image: eclipse-mosquitto:latest
     hostname: weather-service
     container_name: weather-service
-    build:
-      context: .
-      dockerfile: ./weather-service/Dockerfile
-      cache_from:
-        - eclipse-mosquitto:latest
     volumes:
       - ./scripts:/scripts
       - ./configs:/configs

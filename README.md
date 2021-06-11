@@ -4,9 +4,10 @@
 Celem projektu było stworzenie systemu opartego na mikroserwisach zarządzanych Dockerem. Mieliśmy przy tym użyć poniższych technologii:
 * Kafka
 * MongoDB
-* MQTT broker (Mosquitto)
+* MQTT broker (Mosquitto :mosquito:	)
 
 ---
+
 
 ## Mikroserwisy
 Nasz projekt składa się z dziewięciu mikroserwisów:
@@ -14,13 +15,14 @@ Nasz projekt składa się z dziewięciu mikroserwisów:
 2. Weather service - serwis mockujący odczyty z sensora temperatury generujący dane.
 3. Zookeeper - serwis konfuguracyjny i synchronizujący instancje Kafki.
 4. Kafka - centrum całego systemu umożliwiający komunikację i wymianę danych pomiędzy serwisami:
-  - 5. Kafka Connector MQTT - konsumer wskazań temperatury z tematu Mosquitto *temperature*
-  - 6. Kafka Streams Walking Average - stateful serwis wyliczający średnią krokową temperatury
-  - 7. Kafka Connector MongoDB - producent encji do bazy danych
+5. Kafka Connector MQTT - konsumer wskazań temperatury z tematu Mosquitto *temperature*
+6. Kafka Streams Walking Average - stateful serwis wyliczający średnią krokową temperatury
+7. Kafka Connector MongoDB - producent encji do bazy danych
 8. MongoDB - instancja bazy danych temperatury i odpowiadającej jej średniej krokowej.
 9. Nosqlclient - open source web-client bazy MongoDB.
 
 ---
+
 
 ## Architektura
 ### System
@@ -81,6 +83,7 @@ Architektura systemu została przedstawiona na poniższym schemacie.
 
 ---
 
+
 ## How to ...?
 1. ... start the system
 Aby uruchomić system wystarczy wpisać w root-directory projektu:
@@ -100,6 +103,11 @@ Niestety nie jest to możliwe. Projekt został stworzony w ramach przedmiotu Adm
 
 ---
 
+
 ## Autorzy
+
 Chwała Paweł
+
 Kozaczkiewicz Łukasz
+
+---

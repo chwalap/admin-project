@@ -1,7 +1,13 @@
 FROM ubuntu:latest
-RUN apt-get update -y && apt-get upgrade -y && apt-get install openjdk-16-jre curl netcat -y
 
-#COPY ./scripts/wait-for-socket.sh /kafka/
+RUN apt-get update -y && apt-get install openjdk-16-jdk maven curl netcat -y
+
+# build fat jar
+WORKDIR /build
+COPY ./* /build/
+RUN mvn -f ./walking-average/pom.xml package
+
 WORKDIR /app
-COPY ./moving-average/kafka-publisher/target/kafka-publisher-1.0-SNAPSHOT-jar-with-dependencies.jar ./kafka.jar
-CMD  sleep 60 && java -cp kafka.jar com.kafka.myapps.MovingAverage
+COPY /build/walking-average/target/walkingaverage-1.0.jar ./
+
+CMD  [ "java", "-cp",  "./walkingaverage-1.0.jar", "com.walkingaverage.WalkingAverage" ]

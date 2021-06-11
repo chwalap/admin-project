@@ -1,4 +1,4 @@
-package com.kafka.myapps;
+package com.walkingaverage;
 
 import java.util.Map;
 

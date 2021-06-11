@@ -1,6 +1,5 @@
-package com.kafka.myapps;
+package com.walkingaverage;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,8 +28,6 @@ class JsonPOJODeserializer<T> implements Deserializer<T> {
   public T deserialize(String topic, byte[] bytes) {
     if (bytes == null)
       return null;
-
-    System.out.println("Deserialize data: " + new String(bytes, StandardCharsets.UTF_8));
 
     T data;
     try {

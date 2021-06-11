@@ -1,4 +1,4 @@
-package com.kafka.myapps;
+package com.walkingaverage;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -20,7 +20,7 @@ import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
 
-public class MovingAverage {
+public class WalkingAverage {
 
   static final String APPLICATION_ID = "walking-average-stream";
   static final String CLIENT_ID = "client-stream";
@@ -29,6 +29,7 @@ public class MovingAverage {
   static final String WALKING_AVERAGE_TOPIC = "walking-average";
 
   public static void main(final String[] args) {
+
     final Properties streamsConfiguration = new Properties();
     streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, APPLICATION_ID);
     streamsConfiguration.put(StreamsConfig.CLIENT_ID_CONFIG, CLIENT_ID);
@@ -52,6 +53,7 @@ public class MovingAverage {
 
   static Topology getTopology() {
     Map<String, Object> serdeProps = new HashMap<>();
+
     final Serializer<CountAndSum> countAndSumSerializer = new JsonPOJOSerializer<>();
     serdeProps.put("JsonPOJOClass", CountAndSum.class);
     countAndSumSerializer.configure(serdeProps, false);
@@ -59,6 +61,7 @@ public class MovingAverage {
     serdeProps.put("JsonPOJOClass", CountAndSum.class);
     countAndSumDeserializer.configure(serdeProps, false);
     final Serde<CountAndSum> countAndSumSerde = Serdes.serdeFrom(countAndSumSerializer, countAndSumDeserializer);
+
     final Serializer<Temperature> temperatureSerializer = new JsonPOJOSerializer<>();
     serdeProps.put("JsonPOJOClass", Temperature.class);
     temperatureSerializer.configure(serdeProps, false);
@@ -66,6 +69,7 @@ public class MovingAverage {
     serdeProps.put("JsonPOJOClass", Temperature.class);
     temperatureDeserializer.configure(serdeProps, false);
     final Serde<Temperature> temperatureSerde = Serdes.serdeFrom(temperatureSerializer, temperatureDeserializer);
+
     final Serializer<AvgTemperature> avgTemperatureSerializer = new JsonPOJOSerializer<>();
     serdeProps.put("JsonPOJOClass", AvgTemperature.class);
     avgTemperatureSerializer.configure(serdeProps, false);
@@ -79,7 +83,7 @@ public class MovingAverage {
     final KStream<String, Temperature> input = builder.stream(TEMPERATURE_TOPIC,
         Consumed.with(Serdes.String(), temperatureSerde));
 
-    KTable<String, AvgTemperature> walkingAverage = input.selectKey((k, v) -> "cands").groupByKey()
+    KTable<String, AvgTemperature> walkingAverage = input.selectKey((k, v) -> "count_and_sum").groupByKey()
         .aggregate(() -> new CountAndSum(0L, 0.0), (k, v, agg) -> {
           agg.incCount();
           agg.incSum(v.getTemperature());

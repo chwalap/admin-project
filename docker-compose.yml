@@ -10,6 +10,9 @@ services:
       dockerfile: ./mosquitto/Dockerfile
       cache_from:
         - eclipse-mosquitto:latest
+    volumes:
+      - ./scripts:/scripts
+      - ./configs:/configs
     ports:
       - "1883:1883"
     expose:
@@ -17,7 +20,7 @@ services:
     restart: unless-stopped
 
   weather-service:
-    image: weather-service
+    image: eclipse-mosquitto:latest
     hostname: weather-service
     container_name: weather-service
     build:
@@ -25,9 +28,15 @@ services:
       dockerfile: ./weather-service/Dockerfile
       cache_from:
         - eclipse-mosquitto:latest
+    volumes:
+      - ./scripts:/scripts
+      - ./configs:/configs
     depends_on:
       - mosquitto
     restart: unless-stopped
+    command: "bash -c ' \
+      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      /scripts/temp.sh | /usr/bin/mosquitto_pub -h mosquitto -p 1883 -t temperature -c -l'"
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -41,6 +50,8 @@ services:
     volumes:
       - ./data/zookeeper:/data
       - ./logs/zookeeper:/datalog
+      - ./scripts:/scripts
+      - ./configs:/configs
     restart: unless-stopped
 
   kafka:
@@ -59,14 +70,14 @@ services:
     volumes:
       - ./data:/var/lib/kafka/
       - ./scripts:/scripts
+      - ./configs:/configs
     depends_on:
       - zookeeper
     restart: unless-stopped
     command: "bash -c ' \
       echo Waiting for Zookeeper && /scripts/wait-for-socket.sh zookeeper 2181 && \
-      echo Mosquitto is up and running && \
       echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
-      echo Mosquitto is up and running && /etc/confluent/docker/run'"
+      /etc/confluent/docker/run'"
 
   kafka-mqtt:
     image: confluentinc/cp-kafka-connect:latest
@@ -100,7 +111,7 @@ services:
     restart: unless-stopped
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      echo Kafka is up and running && /etc/confluent/docker/run'"
+      /etc/confluent/docker/run'"
 
   kafka-mongodb:
     image: confluentinc/cp-kafka-connect:latest
@@ -134,25 +145,24 @@ services:
     restart: unless-stopped
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      echo Kafka is up and running && /etc/confluent/docker/run'"
+      /etc/confluent/docker/run'"
 
-  kafka-moving-average:
-    image: kafka-moving-average
-    hostname: kafka-moving-average
-    container_name: kafka-moving-average
+  kafka-walking-average:
+    image: kafka-walking-average
+    hostname: kafka-walking-average
+    container_name: kafka-walking-average
     build:
       context: .
       dockerfile: ./kafka-streams/Dockerfile
     restart: unless-stopped
     depends_on:
       - kafka-mqtt
-      - kafka-mongodb
-      - mongo-db
     volumes:
       - ./scripts:/scripts
+      - ./configs:/configs
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      echo Kafka is up and running && sleep 20 && java -cp kafka.jar com.kafka.myapps.MovingAverage'"
+      java -cp /app/walkingaverage-1.0.jar com.walkingaverage.WalkingAverage'"
 
   mongo-db:
     image: mongo:latest
@@ -192,14 +202,11 @@ services:
     command: "bash -c ' \
       echo Waiting for Kafka Connector MQTT && /scripts/wait-for-socket.sh kafka-mqtt 8083 && \
       echo Waiting for Kafka Connector MongoDB && /scripts/wait-for-socket.sh kafka-mongodb 8083 && \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && sleep 5 && \
-      curl -s -d @/configs/mqtt.json -H \"Content-Type: application/json\" -X POST http://kafka-mqtt:8083/connectors && sleep 5 && \
-      curl -s -d @/configs/mongodb.json -H \"Content-Type: application/json\" -X POST http://kafka-mongodb:8083/connectors && sleep 1 && \
-      echo My job is done here. Cya!'"
+      curl -s -d @/configs/mqtt.json -H \"Content-Type: application/json\" -X POST http://kafka-mqtt:8083/connectors && \
+      curl -s -d @/configs/mongodb.json -H \"Content-Type: application/json\" -X POST http://kafka-mongodb:8083/connectors'"
     volumes:
       - ./scripts:/scripts
       - ./configs:/configs
     depends_on:
       - kafka-mqtt
       - kafka-mongodb
-      - mosquitto

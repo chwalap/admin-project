@@ -19,8 +19,13 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
+import org.apache.log4j.PropertyConfigurator;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class WalkingAverage {
+
+  private static final Logger logger = LogManager.getLogger(WalkingAverage.class);
 
   static final String APPLICATION_ID = "walking-average-stream";
   static final String CLIENT_ID = "client-stream";
@@ -29,6 +34,7 @@ public class WalkingAverage {
   static final String WALKING_AVERAGE_TOPIC = "walking-average";
 
   public static void main(final String[] args) {
+    PropertyConfigurator.configure("log4j.properties");
 
     final Properties streamsConfiguration = new Properties();
     streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, APPLICATION_ID);
@@ -42,6 +48,8 @@ public class WalkingAverage {
     streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "/tmp/kafka-streams");
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 10 * 1000);
 
+    logger.info("Creating topology");
+
     final Topology topology = getTopology();
     final KafkaStreams streams = new KafkaStreams(topology, streamsConfiguration);
 
@@ -52,6 +60,7 @@ public class WalkingAverage {
   }
 
   static Topology getTopology() {
+    logger.info("Defining serdes");
     Map<String, Object> serdeProps = new HashMap<>();
 
     final Serializer<CountAndSum> countAndSumSerializer = new JsonPOJOSerializer<>();
@@ -79,12 +88,15 @@ public class WalkingAverage {
     final Serde<AvgTemperature> avgTemperatureSerde = Serdes.serdeFrom(avgTemperatureSerializer,
         avgTemperatureDeserializer);
 
+    logger.info("Building stream");
     final StreamsBuilder builder = new StreamsBuilder();
     final KStream<String, Temperature> input = builder.stream(TEMPERATURE_TOPIC,
         Consumed.with(Serdes.String(), temperatureSerde));
 
+    logger.info("Calculating the walking average");
     KTable<String, AvgTemperature> walkingAverage = input.selectKey((k, v) -> "count_and_sum").groupByKey()
-        .aggregate(() -> new CountAndSum(0L, 0.0), (k, v, agg) -> {
+        .aggregate(() -> new CountAndSum(0L, 0.0, 0.0), (k, v, agg) -> {
+          logger.info("Aggregating... k: " + k + "; v: " + v + "; agg: " + agg);
           agg.incCount();
           agg.incSum(v.getTemperature());
           return agg;

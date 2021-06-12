@@ -7,15 +7,19 @@ public class CountAndSum {
   Long count;
   @JsonProperty("sum")
   Double sum;
+  @JsonProperty("latest_temp")
+  Double latest_temp;
 
   CountAndSum() {
     count = 0L;
     sum = 0.0;
+    latest_temp = 0.0;
   }
 
-  CountAndSum(Long l, Double d) {
+  CountAndSum(Long l, Double d, Double latest) {
     count = l;
     sum = d;
+    latest_temp = latest;
   }
 
   void setCount(Long c) {

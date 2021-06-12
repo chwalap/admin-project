@@ -8,9 +8,10 @@ services:
     build:
       context: .
       dockerfile: ./mosquitto/Dockerfile
-      cache_from:
-        - eclipse-mosquitto:latest
     volumes:
+      - ./data/mosquitto/data:/mosquitto/data
+      - ./data/mosquitto/logs:/mosquitto/logs
+      - ./configs/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - ./scripts:/scripts
       - ./configs:/configs
     ports:
@@ -20,14 +21,15 @@ services:
     restart: unless-stopped
 
   weather-service:
-    image: eclipse-mosquitto:latest
+    image: weather-service
     hostname: weather-service
     container_name: weather-service
+    build:
+      context: .
+      dockerfile: weather-service/Dockerfile
     volumes:
       - ./scripts:/scripts
       - ./configs:/configs
-    depends_on:
-      - mosquitto
     restart: unless-stopped
     command: "sh -c ' \
       echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
@@ -43,8 +45,8 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
-      - ./data/zookeeper:/data
-      - ./logs/zookeeper:/datalog
+      - ./data/zookeeper/data:/var/lib/zookeeper/data
+      - ./data/zookeeper/logs:/var/lib/zookeeper/log
       - ./scripts:/scripts
       - ./configs:/configs
     restart: unless-stopped
@@ -63,7 +65,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
     volumes:
-      - ./data:/var/lib/kafka/
+      - ./data/kafka/data:/var/lib/kafka/data
       - ./scripts:/scripts
       - ./configs:/configs
     depends_on:
@@ -168,7 +170,7 @@ services:
     expose:
       - "27017"
     volumes:
-      - ./data/mongo-db:/data
+      - ./data/mongo/data:/data
     restart: unless-stopped
     command: --bind_ip_all
 
@@ -182,6 +184,7 @@ services:
       - "3000"
     environment:
       MONGO_URL: "mongodb://mongo-db:27017"
+      DEFAULT_CONNECTION_URL: "mongodb://mongo-db:27017"
       PORT: 3000
     depends_on:
       - mongo-db
@@ -197,6 +200,9 @@ services:
     command: "bash -c ' \
       echo Waiting for Kafka Connector MQTT && /scripts/wait-for-socket.sh kafka-mqtt 8083 && \
       echo Waiting for Kafka Connector MongoDB && /scripts/wait-for-socket.sh kafka-mongodb 8083 && \
+      sleep 5 && \
+      curl -s -X DELETE http://kafka-mqtt:8083/connectors/mqtt && \
+      curl -s -X DELETE http://kafka-mongodb:8083/connectors/mongodb && \
       curl -s -d @/configs/mqtt.json -H \"Content-Type: application/json\" -X POST http://kafka-mqtt:8083/connectors && \
       curl -s -d @/configs/mongodb.json -H \"Content-Type: application/json\" -X POST http://kafka-mongodb:8083/connectors'"
     volumes:

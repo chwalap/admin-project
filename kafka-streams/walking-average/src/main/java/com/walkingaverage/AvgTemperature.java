@@ -11,9 +11,9 @@ public class AvgTemperature extends Temperature {
     walkingAverage = temperature;
   }
 
-  AvgTemperature(Double d) {
-    super();
-    walkingAverage = d;
+  AvgTemperature(Double avg, Double temp) {
+    super(temp);
+    walkingAverage = avg;
   }
 
   void setWalkingAverage(Double a) {

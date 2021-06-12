@@ -93,15 +93,15 @@ public class WalkingAverage {
     final KStream<String, Temperature> input = builder.stream(TEMPERATURE_TOPIC,
         Consumed.with(Serdes.String(), temperatureSerde));
 
-    logger.info("Calculating the walking average");
     KTable<String, AvgTemperature> walkingAverage = input.selectKey((k, v) -> "count_and_sum").groupByKey()
         .aggregate(() -> new CountAndSum(0L, 0.0, 0.0), (k, v, agg) -> {
           logger.info("Aggregating... k: " + k + "; v: " + v + "; agg: " + agg);
           agg.incCount();
           agg.incSum(v.getTemperature());
+          agg.setLatestTemp(v.getTemperature());
           return agg;
         }, Materialized.with(Serdes.String(), countAndSumSerde))
-        .mapValues(value -> new AvgTemperature(value.getSum() / value.getCount()),
+        .mapValues(value -> new AvgTemperature(value.getSum() / value.getCount(), value.getLatestTemp()),
             Materialized.with(Serdes.String(), avgTemperatureSerde));
 
     walkingAverage.toStream().to(WALKING_AVERAGE_TOPIC, Produced.with(Serdes.String(), avgTemperatureSerde));

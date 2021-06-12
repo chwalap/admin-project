@@ -2,7 +2,13 @@ package com.walkingaverage;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class CountAndSum {
+
+  private static final Logger logger = LogManager.getLogger(WalkingAverage.class);
+
   @JsonProperty("count")
   Long count;
   @JsonProperty("sum")
@@ -30,6 +36,11 @@ public class CountAndSum {
     sum = s;
   }
 
+  void setLatestTemp(Double d) {
+    latest_temp = d;
+    logger.always().log("Updated latest Temp: " + d);
+  }
+
   void incCount() {
     count += 1;
   }
@@ -44,5 +55,9 @@ public class CountAndSum {
 
   Long getCount() {
     return count;
+  }
+
+  Double getLatestTemp() {
+    return latest_temp;
   }
 }

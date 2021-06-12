@@ -10,6 +10,10 @@ public class Temperature {
     temperature = 0.0;
   }
 
+  Temperature(Double d) {
+    temperature = d;
+  }
+
   Double getTemperature() {
     return temperature;
   }

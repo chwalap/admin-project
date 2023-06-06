@@ -11,99 +11,89 @@ Celem projektu było stworzenie systemu opartego na mikroserwisach zarządzanych
 
 ## Mikroserwisy
 Nasz projekt składa się z kilku mikroserwisów:
-1. Mosquitto broker - odpowiedzialny za zarządzanie kolejkami wiadomości wymienianch w systemie.
-2. Weather service temperature - serwis mockujący odczyty z sensora temperatury generujący dane.
-3. Weather service humidity - serwis mockujący odczyty z sensora wilgotności generujący dane.
+1. Mosquitto broker - odpowiedzialny za zarządzanie kolejkami wiadomości wymienianych w systemie.
+2. Temperature service - skrypt mockujący odczyty z sensora temperatury.
+3. Humidity service - skrypt mockujący odczyty z sensora wilgotności.
 4. Zookeeper - serwis konfuguracyjny i synchronizujący instancje Kafki.
-5. Kafka - centrum całego systemu umożliwiający komunikację i wymianę danych pomiędzy serwisami:
-5. Kafka Connector MQTT Temperature - konsumer wskazań temperatury z tematu Mosquitto *temperature*
-5. Kafka Connector MQTT Humidity - konsumer wskazań wilgotności z tematu Mosquitto *humidity*
-6. Kafka Streams Walking Average Temperature - stateful serwis wyliczający średnią krokową temperatury
-6. Kafka Streams Walking Average Humidity - stateful serwis wyliczający średnią krokową wilgotności
-7. Kafka Connector MongoDB - producent encji do bazy danych
-8. MongoDB - instancja bazy danych temperatury, wilgotności i odpowiadającym im średnim krokowym.
-9. Nosqlclient - open source web-client bazy MongoDB.
+5. Kafka - centrum całego systemu umożliwiające komunikację i wymianę danych.
+6. Kafka Connector - serwis streamujący dane pomiędzy serwisami tj. Mosquitto, Kafka Streams, Kafka MongoDD.
+7. Kafka Streams Walking Average Temperature - stateful serwis wyliczający średnią krokową temperatury.
+8. Kafka Streams Walking Average Humidity - stateful serwis wyliczający średnią krokową wilgotności.
+9. MongoDB - instancja bazy danych temperatury, wilgotności i odpowiadającym im średnim krokowym.
 
 ---
 
 
 ## Architektura
 ### System
-Centrum systemu jest serwer Kafki obsługujący dwie instancje Kafka Connect oraz jedną customową instancję Kafka Streams. Niezależnie od Kafki w systemie znajdują się jeszcze: baza danych MongoDB oraz broker MQTT Mosquitto. Każdy z mikroserwisów działa w osobnym kontenerze Dockera i wystawia na zewnątrz tylko kilka portów, głównie do podglądu zgromadzonych danych.
+Centrum systemu jest serwer Kafki obsługujący jedną instancje Kafka Connect z trzema konektorami oraz dwie customowe instancję Kafka Streams.
+Niezależnie od Kafki działają jeszcze: baza noSQL MongoDB oraz broker MQTT Mosquitto.
+Do generowania danych został przygotowany prosty skrypt w Pythonie [weather_service.py](/weather-service/weather_service.py), który generuje dane o temperaturze i wilgotności dla serwisów Kafka Streams.
+Każdy z mikroserwisów działa w osobnym kontenerze Dockera i wystawia na zewnątrz niezbędne do kooperacji porty.
 
 ### Docker
-Do obsługi systemu został stworzony plik [docker-compose.yml](/docker-compose.yml), który oprócz mikroserwisów startuje również kontener *system-setup*, która czekając na uruchomienie kolejnych serwisów tworzy potrzebne tematy i connectory.
+Do administracji systemu został stworzony plik [docker-compose.yml](/docker-compose.yml), który oprócz obsługi wspomnianych mikroserwisów zarządza również kolejnością ich uruchamiania. Każdy z mikroserwisów czeka na nizbędne dla jego działania elementy systemu. Hierarcha zależności wygląda następująco:
 
-Dodatkowo każdy z systemów czeka na uruchomienie i pełną gotowość serwisów od których zależy. Hierarchia zależności wygląda następująco:
-- Mosquitto broker
-  - Weather service Temperature
-  - Weather service Humidity
-  - Kafka
-  - *system-setup*
+- MongoDB
 - Zookeeper
   - Kafka
-    - Kafka Connector MQTT Temperature
-      - *system-setup*
-    - Kafka Connector MQTT Humidity
-      - *system-setup*
-    - Kafka Streams Walking Average Temperature
-    - Kafka Streams Walking Average Humidity
-    - Kafka Connector MongoDB
-      - *system-setup*
-- MongoDB
-  - Nosqlclient
-  - Kafka Connector MongoDB
+    - Kafka Connect
+      - Mosquitto
+        - Temperature service
+        - Humidity service
+        - Kafka Streams Walking Average Temperature
+        - Kafka Streams Walking Average Humidity
+
+Serwisy na każdym poziomie listy startują równolegle. Zapewnia nam to odpowiednią koordynację pomiędzy kontenerami od samego początku, skutkuje czystszymi logami oraz zapobiega zapchaniu się kolejek tematów.
 
 ### Tematy
-W systemie obsługujemy tylko 3 tematy podzielone według wystawiającego je brokera:
-* Mosquitto:
+W systemie obsługujemy następujące tematy MQTT:
+- Mosquitto:
   - temperature
   - humidity
-* Kafka:
+- Kafka:
   - temperature
   - humidity
   - walking-average-temp
   - walking-average-humid
 
+Tematy są tworzone przed wystartowaniem Mosquitto i tylko jeśli jeszcze nie istnieją. Daje nam to pewność, ze Kafka już działa i poprawnie obsłuży nowe tematy.
+
 ### Data flow
-Przepływ danych zaczyna się od sensorów temperatury i wilgotności. Są one producentami danych Mosquitto i publikują wygenerowane dane w tematach *temperature* i *humidity*. Są to proste dokumenty JSON z jednym tylko polem *temperature* albo *humidity* i wartościami z przedziału [-10, 30]°C albo [0, 100]%. Do generowania odczytów z sensorów służą skrypty [temp.sh](/scripts/temp.sh) i [humid.sh](/scripts/humid.sh). Na przykład:
+Przepływ danych w projekcie zaczyna się w serwisach odpowiedzialnych za generowanie danych na temat temperatury i wilgotności. Są one producentami danych Mosquitto i publikują je w tematach *temperature* i *humidity*. Wynikiem tych generatorów są proste dokumenty JSON z pojedynczym parametrem (*temperature* lub *humidity*) i odpowiadającą mu wartością. Na przykład:
 ```JSON
 {
-  "temperature": 10
+  "temperature": 42
 }
 ```
 ```JSON
 {
-  "humidity": 42
+  "humidity": 69
 }
 ```
+Następnie konektory Kafka konsumują wspomniane dane z tematów Mosquitto i przekazują je do identycznych tematów w Kafce.
 
-Następnie dane z tematów *temperature* i *humidity* są konsumowane przez Kafka Connector MQTT, który jedyne co robi to przekazuje dane z tematu Mosquitto na temat Kafki o identycznej nazwie.
-
-Następnie wiadomości te są konsumowane przez serwisy odpowiadjące za wyliczenie średniej kroczącej - Kafka Streams Walking Average. Zostały tu użyte Kafka Streams DSL (Domain Specific Language), które w zupełności wystarczyły do tak prostego procesowania danych. Tematami Kafki na które publikowane są przetworzone dane są *walking-average-temp* i *walking-average-humid*. Przykładowe dane:
+Kolejnym elementem są customowe serwisy Kafka Stream odpowiedzialne za zbieranie danych z tematów Kafki *temperature* i *humidity*, wyliczanie na ich podstawie średniej kroczącej i publikowanie wyników w tematach *walking-average-temp* oraz *walking-average-humid*. Dane wynikowe są w postaci:
 ```JSON
 {
-  "temperature": 10,
-  "walking_average": 0.12
+  "temperature": 42,
+  "walking_average": 1.23
 }
 ```
 ```JSON
 {
-  "humidity": 42,
-  "walking_average": 0.12
+  "humidity": 69,
+  "walking_average": 6.66
 }
 ```
 
-Ostatni etap przepływu danych w naszym systemie jest obsługiwany przez kolejny connector Kafki czytający dane z tematów *walking-average-temp* i *walking-average-humid* i dodający je do bazy danych.
+Ostatnim etapem przepływu danych w naszym systemie jest Kafka MongoDB Connector, który pobiera dane z tematów *walking-average-temp* oraz *walking-average-humid* i zapisuje je do bazy danych MongoDB.
 
-*Plugin Kafki do obsługi MongoDB ma całkiem spore możliwości. Według przeprowadzonego przez nas researchu, możliwe jest wyliczanie średniej kroczącej jako część procesu dodawania danych do bazy.*
-
-### Schemat
+### Schemat systemu
 Architektura systemu została przedstawiona na poniższym schemacie.
 ![Cannot load the pictrue!](/docs/architecture.png?raw=true)
 
 ---
-
 
 ## How to ...?
 1. ... start the system
@@ -113,11 +103,11 @@ docker-compose up --build
 ```
 
 2. ... access MongoDB
-Dostęp do bazy danych jest umożliwiony poprzez wystawienie na zewnątrz portu `3000` serwisu *nosqlclient*, a więć najprawdopodobniej [tu](http://localhost:3000). Aby połączyć się z bazą danych trzeba dodać połączenie użhywając poniższego adresu.
+Baza danych jest dostępna pod portem 27017. Można ją przeglądnąć na przykład za pomocą MongoDB Compass.
 ```
-mongodb://mongo-db:27017
+mongodb://localhost:27017
 ```
-Dane znajdują się w bazie `weather-statistics` w tabelach `temperature-stats` i `humidity-stats`.
+Dane znajdują się w bazie `weather-statistics` w tabeli `stats`.
 
 ---
 

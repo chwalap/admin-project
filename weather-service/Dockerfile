@@ -1,4 +1,7 @@
-FROM ubuntu:latest
+FROM python:3.9-slim
 
-RUN apt-get update -y && apt-get install mosquitto-clients netcat -y
-CMD [ "/usr/bin/mosquitto_pub" ]
+RUN apt-get update && apt-get install netcat curl bash -y
+RUN pip install --no-cache-dir paho-mqtt docker-compose
+COPY ./weather-service/weather_service.py .
+
+CMD ["/bin/true"]

@@ -16,32 +16,56 @@ services:
       - ./configs:/configs
     ports:
       - "1883:1883"
-    expose:
-      - "1883"
     restart: unless-stopped
+    command: "bash -c ' \
+      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
+      echo Waiting for Kafka Connect && /scripts/wait-for-socket.sh kafka-connect 8083 && \
+      sleep 3 && \
+      curl -X DELETE http://kafka-connect:8083/connectors/temperature && \
+      curl -X DELETE http://kafka-connect:8083/connectors/humidity && \
+      curl -X DELETE http://kafka-connect:8083/connectors/mongodb && \
+      curl -d @/configs/temperature.json -H \"Content-Type: application/json\" -X POST http://kafka-connect:8083/connectors && \
+      curl -d @/configs/humidity.json -H \"Content-Type: application/json\" -X POST http://kafka-connect:8083/connectors && \
+      curl -d @/configs/mongodb.json -H \"Content-Type: application/json\" -X POST http://kafka-connect:8083/connectors && \
+      /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'"
 
-  weather-service:
-    image: weather-service
-    hostname: weather-service
-    container_name: weather-service
+  temperature-service:
+    image: temperature-service
+    hostname: temperature-service
+    container_name: temperature-service
     build:
       context: .
       dockerfile: weather-service/Dockerfile
+    restart: unless-stopped
     volumes:
       - ./scripts:/scripts
-      - ./configs:/configs
-    restart: unless-stopped
-    command: "sh -c ' \
+    command: "bash -c ' \
       echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
-      /scripts/temp.sh | /usr/bin/mosquitto_pub -h mosquitto -p 1883 -t temperature --id 666 -c -l'"
+      python ./weather_service.py mosquitto temperature -20.0 50.0'"
+
+  humidity-service:
+    image: humidity-service
+    hostname: humidity-service
+    container_name: humidity-service
+    build:
+      context: .
+      dockerfile: weather-service/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./scripts:/scripts
+    command: "bash -c ' \
+      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      sleep 8 && \
+      python ./weather_service.py mosquitto humidity 0.0 100.0'"
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:5.0.0
     hostname: zookeeper
     container_name: zookeeper
     ports:
       - "2181:2181"
     environment:
+      ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: ERROR
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
@@ -52,12 +76,15 @@ services:
     restart: unless-stopped
 
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:5.0.0
     hostname: kafka
     container_name: kafka
     ports:
       - "9092:9092"
     environment:
+      KAFKA_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.apache.kafka=ERROR,kafka=ERROR,kafka.cluster=ERROR,kafka.controller=ERROR,kafka.coordinator=ERROR,kafka.log=ERROR,kafka.server=ERROR,kafka.zookeeper=ERROR,state.change.logger=ERROR
+      KAFKA_TOOLS_LOG4J_LOGLEVEL: ERROR
+      KAFKA_LOG4J_ROOT_LOGLEVEL: ERROR
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
@@ -67,18 +94,15 @@ services:
       - ./data/kafka/data:/var/lib/kafka/data
       - ./scripts:/scripts
       - ./configs:/configs
-    depends_on:
-      - zookeeper
     restart: unless-stopped
     command: "bash -c ' \
       echo Waiting for Zookeeper && /scripts/wait-for-socket.sh zookeeper 2181 && \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
       /etc/confluent/docker/run'"
 
-  kafka-mqtt:
-    image: confluentinc/cp-kafka-connect:latest
-    hostname: kafka-mqtt
-    container_name: kafka-mqtt
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:5.0.0
+    hostname: kafka-connect
+    container_name: kafka-connect
     ports:
       - "8083:8083"
     volumes:
@@ -86,9 +110,10 @@ services:
       - ./scripts:/scripts
       - ./configs:/configs
     environment:
+      CONNECT_LOG4J_ROOT_LOGLEVEL: ERROR
       CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
       CONNECT_GROUP_ID: mqtt-connect-group
-      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-mqtt
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
       CONNECT_CONFIG_STORAGE_TOPIC: mqtt-connect-configs
       CONNECT_OFFSET_STORAGE_TOPIC: mqtt-connect-offsets
       CONNECT_STATUS_STORAGE_TOPIC: mqtt-connect-status
@@ -101,64 +126,44 @@ services:
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_STORAGE_PARTITIONS: 1
       CONNECT_STATUS_STORAGE_PARTITIONS: 1
-    depends_on:
-      - zookeeper
-      - kafka
     restart: unless-stopped
     command: "bash -c ' \
       echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
+      /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic temperature && \
+      /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic humidity && \
+      /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic walking-average-temp && \
+      /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic walking-average-humid && \
       /etc/confluent/docker/run'"
 
-  kafka-mongodb:
-    image: confluentinc/cp-kafka-connect:latest
-    hostname: kafka-mongodb
-    container_name: kafka-mongodb
-    ports:
-      - "8084:8083"
-    environment:
-      CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
-      CONNECT_GROUP_ID: mongodb-connect-group
-      CONNECT_REST_ADVERTISED_HOST_NAME: mongodb-mqtt
-      CONNECT_CONFIG_STORAGE_TOPIC: mongodb-connect-configs
-      CONNECT_OFFSET_STORAGE_TOPIC: mongodb-connect-offsets
-      CONNECT_STATUS_STORAGE_TOPIC: mongodb-connect-status
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_OFFSET_STORAGE_PARTITIONS: 1
-      CONNECT_STATUS_STORAGE_PARTITIONS: 1
-    depends_on:
-      - zookeeper
-      - kafka
-    volumes:
-      - ./connectors/jars:/etc/kafka-connect/jars
-      - ./scripts:/scripts
-      - ./configs:/configs
-    restart: unless-stopped
-    command: "bash -c ' \
-      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      /etc/confluent/docker/run'"
-
-  kafka-walking-average:
-    image: kafka-walking-average
-    hostname: kafka-walking-average
-    container_name: kafka-walking-average
+  kafka-walking-average-temp:
+    image: kafka-walking-average-temp
+    hostname: kafka-walking-average-temp
+    container_name: kafka-walking-average-temp
     build:
       context: .
-      dockerfile: ./kafka-streams/Dockerfile
+      dockerfile: ./kafka-streams/walking-average-temperature/Dockerfile
     restart: unless-stopped
-    depends_on:
-      - kafka-mqtt
     volumes:
       - ./scripts:/scripts
       - ./configs:/configs
     command: "bash -c ' \
-      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      java -cp /app/walkingaverage-1.0.jar com.walkingaverage.WalkingAverage'"
+      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      java -cp /app/walkingaveragetemp-1.0.jar com.walkingaveragetemp.WalkingAverageTemp'"
+
+  kafka-walking-average-humid:
+    image: kafka-walking-average-humid
+    hostname: kafka-walking-average-humid
+    container_name: kafka-walking-average-humid
+    build:
+      context: .
+      dockerfile: ./kafka-streams/walking-average-humidity/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./scripts:/scripts
+      - ./configs:/configs
+    command: "bash -c ' \
+      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      java -cp /app/walkingaveragehumid-1.0.jar com.walkingaveragehumid.WalkingAverageHumid'"
 
   mongo-db:
     image: mongo:latest
@@ -166,47 +171,10 @@ services:
     container_name: mongo-db
     ports:
       - "27017:27017"
-    expose:
-      - "27017"
     volumes:
       - ./data/mongo/data:/data
     restart: unless-stopped
-    command: --bind_ip_all
-
-  mongo-client:
-    image: mongoclient/mongoclient
-    hostname: mongo-client
-    container_name: mongo-client
-    ports:
-      - 3000:3000
-    expose:
-      - "3000"
-    environment:
-      MONGO_URL: "mongodb://mongo-db:27017"
-      DEFAULT_CONNECTION_URL: "mongodb://mongo-db:27017"
-      PORT: 3000
-    depends_on:
-      - mongo-db
-    restart: unless-stopped
-
-  system-setup:
-    image: system-setup
-    hostname: system-setup
-    container_name: system-setup
-    build:
-      context: .
-      dockerfile: ./system-setup/Dockerfile
-    command: "bash -c ' \
-      echo Waiting for Kafka Connector MQTT && /scripts/wait-for-socket.sh kafka-mqtt 8083 && \
-      echo Waiting for Kafka Connector MongoDB && /scripts/wait-for-socket.sh kafka-mongodb 8083 && \
-      sleep 5 && \
-      curl -s -X DELETE http://kafka-mqtt:8083/connectors/mqtt && \
-      curl -s -X DELETE http://kafka-mongodb:8083/connectors/mongodb && \
-      curl -s -d @/configs/mqtt.json -H \"Content-Type: application/json\" -X POST http://kafka-mqtt:8083/connectors && \
-      curl -s -d @/configs/mongodb.json -H \"Content-Type: application/json\" -X POST http://kafka-mongodb:8083/connectors'"
-    volumes:
-      - ./scripts:/scripts
-      - ./configs:/configs
-    depends_on:
-      - kafka-mqtt
-      - kafka-mongodb
+    command:
+      - '--bind_ip_all'
+      - '--logpath'
+      - '/data/mongodb.log'

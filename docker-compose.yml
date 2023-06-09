@@ -18,8 +18,8 @@ services:
       - "1883:1883"
     restart: unless-stopped
     command: "bash -c ' \
-      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
-      echo Waiting for Kafka Connect && /scripts/wait-for-socket.sh kafka-connect 8083 && \
+      echo Waiting for Kafka && . /scripts/wait-for-socket.sh kafka 9092 && \
+      echo Waiting for Kafka Connect && . /scripts/wait-for-socket.sh kafka-connect 8083 && \
       sleep 3 && \
       curl -X DELETE http://kafka-connect:8083/connectors/temperature && \
       curl -X DELETE http://kafka-connect:8083/connectors/humidity && \
@@ -40,7 +40,7 @@ services:
     volumes:
       - ./scripts:/scripts
     command: "bash -c ' \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      echo Waiting for Mosquitto && . /scripts/wait-for-socket.sh mosquitto 1883 && \
       python ./weather_service.py mosquitto temperature -20.0 50.0'"
 
   humidity-service:
@@ -54,7 +54,7 @@ services:
     volumes:
       - ./scripts:/scripts
     command: "bash -c ' \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      echo Waiting for Mosquitto && . /scripts/wait-for-socket.sh mosquitto 1883 && \
       sleep 8 && \
       python ./weather_service.py mosquitto humidity 0.0 100.0'"
 
@@ -96,7 +96,7 @@ services:
       - ./configs:/configs
     restart: unless-stopped
     command: "bash -c ' \
-      echo Waiting for Zookeeper && /scripts/wait-for-socket.sh zookeeper 2181 && \
+      echo Waiting for Zookeeper && . /scripts/wait-for-socket.sh zookeeper 2181 && \
       /etc/confluent/docker/run'"
 
   kafka-connect:
@@ -128,7 +128,7 @@ services:
       CONNECT_STATUS_STORAGE_PARTITIONS: 1
     restart: unless-stopped
     command: "bash -c ' \
-      echo Waiting for Kafka && /scripts/wait-for-socket.sh kafka 9092 && \
+      echo Waiting for Kafka && . /scripts/wait-for-socket.sh kafka 9092 && \
       /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic temperature && \
       /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic humidity && \
       /usr/bin/kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --replication-factor 1 --partitions 1 --topic walking-average-temp && \
@@ -147,7 +147,7 @@ services:
       - ./scripts:/scripts
       - ./configs:/configs
     command: "bash -c ' \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      echo Waiting for Mosquitto && . /scripts/wait-for-socket.sh mosquitto 1883 && \
       java -cp /app/walkingaveragetemp-1.0.jar com.walkingaveragetemp.WalkingAverageTemp'"
 
   kafka-walking-average-humid:
@@ -162,7 +162,7 @@ services:
       - ./scripts:/scripts
       - ./configs:/configs
     command: "bash -c ' \
-      echo Waiting for Mosquitto && /scripts/wait-for-socket.sh mosquitto 1883 && \
+      echo Waiting for Mosquitto && . /scripts/wait-for-socket.sh mosquitto 1883 && \
       java -cp /app/walkingaveragehumid-1.0.jar com.walkingaveragehumid.WalkingAverageHumid'"
 
   mongo-db:

@@ -9,4 +9,4 @@ RUN mvn clean package && \
     mkdir -p /app && \
     cp /build/target/walkingaveragetemp-1.0-jar-with-dependencies.jar /app/walkingaveragetemp-1.0.jar
 
-CMD  [ "java", "-cp",  "/app/walkingaveragetemp-1.0.jar", "com.walkingaveragetemp.WalkingAverageTemp" ]
+CMD ["/bin/true"]
